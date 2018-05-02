@@ -2,6 +2,7 @@
 
 #
 # Copyright (c) 2013, Digium, Inc.
+# Copyright (c) 2018, AVOXI, Inc.
 #
 
 """HTTP client abstractions.
@@ -10,7 +11,7 @@
 import logging
 import requests
 import requests.auth
-import urlparse
+import urllib.parse
 import websocket
 
 log = logging.getLogger(__name__)
@@ -95,7 +96,7 @@ class Authenticator(object):
         :param url: URL to check.
         :return: True if matches host, port and scheme, False otherwise.
         """
-        split = urlparse.urlsplit(url)
+        split = urllib.parse.urlsplit(url)
         return self.host == split.hostname
 
     def apply(self, request):

@@ -1,5 +1,6 @@
 #
 # Copyright (c) 2013, Digium, Inc.
+# Copyright (c) 2018, AVOXI, Inc.
 #
 
 """Swagger client library.
@@ -9,11 +10,11 @@ import json
 import logging
 import os.path
 import re
-import urllib
-import swaggerpy
+import urllib.request, urllib.parse, urllib.error
 
-from swaggerpy.http_client import SynchronousHttpClient
-from swaggerpy.processors import WebsocketProcessor, SwaggerProcessor
+from .swagger_model import Loader
+from .http_client import SynchronousHttpClient
+from .processors import WebsocketProcessor, SwaggerProcessor
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ class Operation(object):
         :param kwargs: ARI operation arguments.
         :return: Implementation specific response or WebSocket connection
         """
-        log.info("%s?%r" % (self.json['nickname'], urllib.urlencode(kwargs)))
+        log.info("%s?%r" % (self.json['nickname'], urllib.parse.urlencode(kwargs)))
         method = self.json['httpMethod']
         uri = self.uri
         params = {}
@@ -67,8 +68,7 @@ class Operation(object):
 
             if value is not None:
                 if param['paramType'] == 'path':
-                    uri = uri.replace('{%s}' % pname,
-                                      urllib.quote_plus(str(value)))
+                    uri = uri.replace('{%s}' % pname, urllib.parse.quote_plus(str(value)))
                 elif param['paramType'] == 'query':
                     params[pname] = value
                 elif param['paramType'] == 'body':
@@ -192,7 +192,7 @@ class SwaggerClient(object):
             http_client = SynchronousHttpClient()
         self.http_client = http_client
 
-        loader = swaggerpy.Loader(
+        loader = Loader(
             http_client, [WebsocketProcessor(), ClientProcessor()])
 
         if isinstance(url_or_resource, str):

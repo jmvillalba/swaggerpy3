@@ -1,7 +1,7 @@
 About
 -----
 
-Swagger.py is a Python library for using
+swaggerpy3 is a Python 3 library for using
 `Swagger <https://developers.helloreverb.com/swagger/>`__ defined API's.
 
 Swagger itself is best described on the Swagger home page:
@@ -14,7 +14,7 @@ The `Swagger
 specification <https://github.com/wordnik/swagger-core/wiki>`__ defines
 how API's may be described using Swagger.
 
-Swagger.py also supports a WebSocket extension, allowing a WebSocket to
+swaggerpy3 also supports a WebSocket extension, allowing a WebSocket to
 be documented, and auto-generated WebSocket client code.
 
 Usage
@@ -24,7 +24,7 @@ Install the latest release from PyPI.
 
 ::
 
-    $ sudo pip install swaggerpy
+    $ sudo pip install swaggerpy3
 
 Or install from source using the ``setup.py`` script.
 
@@ -35,7 +35,7 @@ Or install from source using the ``setup.py`` script.
 API
 ===
 
-Swagger.py will dynamically build an object model from a Swagger-enabled
+swaggerpy3 will dynamically build an object model from a Swagger-enabled
 RESTful API.
 
 Here is a simple example using the `Asterisk REST
@@ -43,12 +43,12 @@ Interface <https://wiki.asterisk.org/wiki/display/AST/Asterisk+12+ARI>`__
 
 .. code:: Python
 
-    #!/usr/bin/env python
+    #!/usr/bin/env python3
 
     import json
 
-    from swaggerpy.client import SwaggerClient
-    from swaggerpy.http_client import SynchronousHttpClient
+    from swaggerpy3.client import SwaggerClient
+    from swaggerpy3.http_client import SynchronousHttpClient
 
     http_client = SynchronousHttpClient()
     http_client.set_basic_auth('localhost', 'hey', 'peekaboo')
@@ -139,11 +139,20 @@ the code coverage report. HTML versions of the reports are put in
     $ ./setup.py bdist_egg # build distributable
 
 
+TODO
+----
+- Refactor / check unit tests
+- Refactor / check cli tools
+- Implementing asyncio loop and coroutines
+- Replacing requests with aiohttp
+
 
 License
 -------
 
-Copyright (c) 2013, Digium, Inc. All rights reserved.
+Copyright (c) 2013, Digium, Inc.
+Copyright (c) 2018, AVOXI, Inc.
 
-Swagger.py is licensed with a `BSD 3-Clause
-License <http://opensource.org/licenses/BSD-3-Clause>`__.
+All rights reserved.
+
+swaggerpy3 is licensed with a `BSD 3-Clause License <http://opensource.org/licenses/BSD-3-Clause>`__.
