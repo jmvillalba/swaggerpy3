@@ -1,29 +1,20 @@
-#
-# Copyright (c) 2013, Digium, Inc.
-# Copyright (c) 2018, AVOXI, Inc.
-#
-
-"""Swagger client library.
-"""
-
-import json
-import logging
-import os.path
+import os
 import re
+import logging
+import swaggerpy3
 import urllib.request, urllib.parse, urllib.error
 
-from .swagger_model import Loader
-from .http_client import SynchronousHttpClient
+from .http_client import AsyncHttpClient
 from .processors import WebsocketProcessor, SwaggerProcessor
 
+logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
-
 
 class ClientProcessor(SwaggerProcessor):
     """Enriches swagger models for client processing.
     """
 
-    def process_resource_listing_api(self, resources, listing_api, context):
+    async def process_resource_listing_api(self, resources, listing_api, context):
         """Add name to listing_api.
 
         :param resources: Resource listing object
@@ -34,7 +25,6 @@ class ClientProcessor(SwaggerProcessor):
         name, ext = os.path.splitext(os.path.basename(listing_api['path']))
         listing_api['name'] = name
 
-
 class Operation(object):
     """Operation object.
     """
@@ -44,10 +34,10 @@ class Operation(object):
         self.json = operation
         self.http_client = http_client
 
-    def __repr__(self):
+    async def __repr__(self):
         return "%s(%s)" % (self.__class__.__name__, self.json['nickname'])
 
-    def __call__(self, **kwargs):
+    async def __call__(self, **kwargs):
         """Invoke ARI operation.
 
         :param kwargs: ARI operation arguments.
@@ -57,8 +47,6 @@ class Operation(object):
         method = self.json['httpMethod']
         uri = self.uri
         params = {}
-        data = None
-        headers = None
         for param in self.json.get('parameters', []):
             pname = param['name']
             value = kwargs.get(pname)
@@ -66,24 +54,15 @@ class Operation(object):
             if isinstance(value, list):
                 value = ",".join(value)
 
-            if value is not None:
+            if value:
                 if param['paramType'] == 'path':
-                    uri = uri.replace('{%s}' % pname, urllib.parse.quote_plus(str(value)))
+                    uri = uri.replace('{%s}' % pname, str(value))
                 elif param['paramType'] == 'query':
                     params[pname] = value
-                elif param['paramType'] == 'body':
-                    if isinstance(value, dict):
-                        if data:
-                            data.update(value)
-                        else:
-                            data = value
-                    else:
-                        raise TypeError(
-                            "Parameters of type 'body' require dict input")
                 else:
                     raise AssertionError(
                         "Unsupported paramType %s" %
-                        param['paramType'])
+                        param.paramType)
                 del kwargs[pname]
             else:
                 if param['required']:
@@ -92,26 +71,16 @@ class Operation(object):
                         (pname, self.json['nickname']))
         if kwargs:
             raise TypeError("'%s' does not have parameters %r" %
-                            (self.json['nickname'], kwargs.keys()))
+                (self.json['nickname'], list(kwargs.keys())))
 
         log.info("%s %s(%r)", method, uri, params)
-
-        if data:
-            data = json.dumps(data)
-            headers = {'Content-type': 'application/json',
-                       'Accept': 'application/json'}
-
         if self.json['is_websocket']:
             # Fix up http: URLs
             uri = re.sub('^http', "ws", uri)
-            if data:
-                raise NotImplementedError(
-                    "Sending body data with websockets not implmented")
-            return self.http_client.ws_connect(uri, params=params)
+            print(params)
+            return await self.http_client.ws_connect(uri, params=params)
         else:
-            return self.http_client.request(
-                method, uri, params=params, data=data, headers=headers)
-
+            return await self.http_client.request(method, uri)
 
 class Resource(object):
     """Swagger resource, described in an API declaration.
@@ -176,61 +145,49 @@ class Resource(object):
         uri = decl['basePath'] + api['path']
         return Operation(uri, operation, self.http_client)
 
-
+        
 class SwaggerClient(object):
-    """Client object for accessing a Swagger-documented RESTful service.
-
-    :param url_or_resource: Either the parsed resource listing+API decls, or
-                            its URL.
-    :type url_or_resource: dict or str
-    :param http_client: HTTP client API
-    :type  http_client: HttpClient
-    """
-
-    def __init__(self, url_or_resource, http_client=None):
+    async def connect(self, url_or_resource, http_client=None):
         if not http_client:
-            http_client = SynchronousHttpClient()
+            http_client = AsyncHttpClient()
         self.http_client = http_client
 
-        loader = Loader(
-            http_client, [WebsocketProcessor(), ClientProcessor()])
+        loader = swaggerpy3.Loader(
+            http_client,
+            [
+                WebsocketProcessor(),
+                ClientProcessor()
+            ]
+        )
 
         if isinstance(url_or_resource, str):
             log.debug("Loading from %s" % url_or_resource)
-            self.api_docs = loader.load_resource_listing(url_or_resource)
+            self.api_docs = await loader.load_resource_listing(url_or_resource)
         else:
             log.debug("Loading from %s" % url_or_resource.get('basePath'))
             self.api_docs = url_or_resource
             loader.process_resource_listing(self.api_docs)
 
+        for resource in self.api_docs['apis']:
+            print(resource)
+            print('here')
+
         self.resources = {
             resource['name']: Resource(resource, http_client)
-            for resource in self.api_docs['apis']}
+                   for resource in self.api_docs['apis']
+        }
 
-    def __repr__(self):
+    async def __repr__(self):
         return "%s(%s)" % (self.__class__.__name__, self.api_docs['basePath'])
 
     def __getattr__(self, item):
-        """Promote resource objects to be client fields.
-
-        :param item: Name of the attribute to get.
-        :return: Resource object.
-        """
         resource = self.get_resource(item)
         if not resource:
             raise AttributeError("API has no resource '%s'" % item)
         return resource
 
-    def close(self):
-        """Close the SwaggerClient, and underlying resources.
-        """
+    async def close(self):
         self.http_client.close()
 
     def get_resource(self, name):
-        """Gets a Swagger resource by name.
-
-        :param name: Name of the resource to get
-        :rtype: Resource
-        :return: Resource, or None if not found.
-        """
         return self.resources.get(name)

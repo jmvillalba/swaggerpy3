@@ -1,6 +1,6 @@
 #
-# Copyright (c) 2013, Digium, Inc.
 # Copyright (c) 2018, AVOXI, Inc.
+# Copyright (c) 2013, Digium, Inc.
 #
 
 """Swagger processing libraries.
@@ -11,5 +11,5 @@ More information on Swagger can be found `on the Swagger website
 
 __all__ = ["client", "codegen", "processors", "swagger_model"]
 
-from .swagger_model import load_file, load_json, load_url, Loader
-from .processors import SwaggerProcessor, SwaggerError
+from swaggerpy3.swagger_model import load_file, load_json, load_url, Loader
+from swaggerpy3.processors import SwaggerProcessor, SwaggerError

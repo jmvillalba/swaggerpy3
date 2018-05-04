@@ -11,7 +11,7 @@ import os
 import urllib.request, urllib.parse, urllib.error
 import urllib.parse
 
-from .http_client import SynchronousHttpClient
+from .http_client import AsyncHttpClient
 from .processors import SwaggerProcessor, SwaggerError
 
 SWAGGER_VERSIONS = ["1.1", "1.2"]
@@ -34,7 +34,7 @@ class ValidationProcessor(SwaggerProcessor):
     """A processor that validates the Swagger model.
     """
 
-    def process_resource_listing(self, resources, context):
+    async def process_resource_listing(self, resources, context):
         required_fields = ['basePath', 'apis', 'swaggerVersion']
         validate_required_fields(resources, required_fields, context)
 
@@ -43,33 +43,33 @@ class ValidationProcessor(SwaggerProcessor):
                 "Unsupported Swagger version %s" % resources.swaggerVersion,
                 context)
 
-    def process_resource_listing_api(self, resources, listing_api, context):
+    async def process_resource_listing_api(self, resources, listing_api, context):
         validate_required_fields(listing_api, ['path', 'description'], context)
 
         if not listing_api['path'].startswith("/"):
             raise SwaggerError("Path must start with /", context)
 
-    def process_api_declaration(self, resources, resource, context):
+    async def process_api_declaration(self, resources, resource, context):
         required_fields = [
             'swaggerVersion', 'basePath', 'resourcePath', 'apis',
             'models'
         ]
         validate_required_fields(resource, required_fields, context)
         # Check model name and id consistency
-        for (model_name, model) in resource['models'].items():
+        for (model_name, model) in list(resource['models'].items()):
             if model_name != model['id']:
                 raise SwaggerError("Model id doesn't match name", context)
                 # Convert models dict to list
 
-    def process_resource_api(self, resources, resource, api, context):
+    async def process_resource_api(self, resources, resource, api, context):
         required_fields = ['path', 'operations']
         validate_required_fields(api, required_fields, context)
 
-    def process_operation(self, resources, resource, api, operation, context):
+    async def process_operation(self, resources, resource, api, operation, context):
         required_fields = ['httpMethod', 'nickname']
         validate_required_fields(operation, required_fields, context)
 
-    def process_parameter(self, resources, resource, api, operation, parameter,
+    async def process_parameter(self, resources, resource, api, operation, parameter,
                           context):
         required_fields = ['name', 'paramType']
         validate_required_fields(parameter, required_fields, context)
@@ -85,25 +85,25 @@ class ValidationProcessor(SwaggerProcessor):
                 "Field 'allowedValues' invalid; use 'allowableValues'",
                 context)
 
-    def process_error_response(self, resources, resource, api, operation,
+    async def process_error_response(self, resources, resource, api, operation,
                                error_response, context):
         required_fields = ['code', 'reason']
         validate_required_fields(error_response, required_fields, context)
 
-    def process_model(self, resources, resource, model, context):
+    async def process_model(self, resources, resource, model, context):
         required_fields = ['id', 'properties']
         validate_required_fields(model, required_fields, context)
         # Move property field name into the object
-        for (prop_name, prop) in model['properties'].items():
+        for (prop_name, prop) in list(model['properties'].items()):
             prop['name'] = prop_name
 
-    def process_property(self, resources, resource, model, prop,
+    async def process_property(self, resources, resource, model, prop,
                          context):
         required_fields = ['type']
         validate_required_fields(prop, required_fields, context)
 
 
-def json_load_url(http_client, url):
+async def json_load_url(http_client, url):
     """Download and parse JSON from a URL.
 
     :param http_client: HTTP client interface.
@@ -120,9 +120,8 @@ def json_load_url(http_client, url):
         finally:
             fp.close()
     else:
-        resp = http_client.request('GET', url)
-        resp.raise_for_status()
-        return resp.json()
+        resp = await http_client.request('GET', url)
+        return resp
 
 
 class Loader(object):
@@ -142,7 +141,7 @@ class Loader(object):
         # noinspection PyTypeChecker
         self.processors = [ValidationProcessor()] + processors
 
-    def load_resource_listing(self, resources_url, base_url=None):
+    async def load_resource_listing(self, resources_url, base_url=None):
         """Load a resource listing, loading referenced API declarations.
 
         The following fields are added to the resource listing object model.
@@ -159,7 +158,7 @@ class Loader(object):
         """
 
         # Load the resource listing
-        resource_listing = json_load_url(self.http_client, resources_url)
+        resource_listing = await json_load_url(self.http_client, resources_url)
 
         # Some extra data only known about at load time
         resource_listing['url'] = resources_url
@@ -168,13 +167,13 @@ class Loader(object):
 
         # Load the API declarations
         for api in resource_listing.get('apis'):
-            self.load_api_declaration(base_url, api)
+            await self.load_api_declaration(base_url, api)
 
         # Now that the raw object model has been loaded, apply the processors
-        self.process_resource_listing(resource_listing)
+        await self.process_resource_listing(resource_listing)
         return resource_listing
 
-    def load_api_declaration(self, base_url, api_dict):
+    async def load_api_declaration(self, base_url, api_dict):
         """Load an API declaration file.
 
         api_dict is modified with the results of the load:
@@ -186,17 +185,16 @@ class Loader(object):
         """
         path = api_dict.get('path').replace('{format}', 'json')
         api_dict['url'] = urllib.parse.urljoin(base_url + '/', path.strip('/'))
-        api_dict['api_declaration'] = json_load_url(
+        api_dict['api_declaration'] = await json_load_url(
             self.http_client, api_dict['url'])
 
-    def process_resource_listing(self, resources):
+    async def process_resource_listing(self, resources):
         """Apply processors to a resource listing.
 
         :param resources: Resource listing to process.
         """
         for processor in self.processors:
-            processor.apply(resources)
-
+            await processor.apply(resources)
 
 def validate_required_fields(json, required_fields, context):
     """Checks a JSON object for a set of required fields.
@@ -207,12 +205,12 @@ def validate_required_fields(json, required_fields, context):
     :param required_fields: List of required fields.
     :param context: Current context in the API.
     """
+    print(required_fields)
     missing_fields = [f for f in required_fields if not f in json]
 
     if missing_fields:
         raise SwaggerError(
             "Missing fields: %s" % ', '.join(missing_fields), context)
-
 
 def load_file(resource_listing_file, http_client=None, processors=None):
     """Loads a resource listing file, applying the given processors.
@@ -228,10 +226,9 @@ def load_file(resource_listing_file, http_client=None, processors=None):
     url = urllib.parse.urljoin('file:', urllib.request.pathname2url(file_path))
     # When loading from files, everything is relative to the resource listing
     dir_path = os.path.dirname(file_path)
-    base_url = urlparse.urljoin('file:', urllib.request.pathname2url(dir_path))
+    base_url = urllib.parse.urljoin('file:', urllib.request.pathname2url(dir_path))
     return load_url(url, http_client=http_client, processors=processors,
                     base_url=base_url)
-
 
 def load_url(resource_listing_url, http_client=None, processors=None,
              base_url=None):
@@ -248,7 +245,7 @@ def load_url(resource_listing_url, http_client=None, processors=None,
     :raise: IOError, URLError: On error reading api-docs.
     """
     if http_client is None:
-        http_client = SynchronousHttpClient()
+        http_client = AsyncHttpClient()
 
     loader = Loader(http_client=http_client, processors=processors)
     return loader.load_resource_listing(
@@ -265,7 +262,7 @@ def load_json(resource_listing, http_client=None, processors=None):
     :return: Processed resource listing.
     """
     if http_client is None:
-        http_client = SynchronousHttpClient()
+        http_client = AsyncHttpClient()
 
     loader = Loader(http_client=http_client, processors=processors)
     loader.process_resource_listing(resource_listing)

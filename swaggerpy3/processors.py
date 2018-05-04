@@ -9,7 +9,6 @@ particular use case (such as ensuring that description and summary fields
 exist)
 """
 
-
 class ParsingContext(object):
     """Context information for parsing.
 
@@ -23,18 +22,18 @@ class ParsingContext(object):
         self.args = {'context': self}
 
     def __repr__(self):
-        zipped = zip(self.type_stack, self.id_stack)
+        zipped = list(zip(self.type_stack, self.id_stack))
         strs = ["%s=%s" % (t, i) for (t, i) in zipped]
         return "ParsingContext(stack=%r)" % strs
 
-    def is_empty(self):
+    async def is_empty(self):
         """Tests whether context is empty.
 
         :return: True if empty, False otherwise.
         """
         return not self.type_stack and not self.id_stack
 
-    def push(self, obj_type, json, id_field):
+    async def push(self, obj_type, json, id_field):
         """Pushes a new self-identifying object into the context.
 
         :type obj_type: str
@@ -45,10 +44,10 @@ class ParsingContext(object):
         :param id_field: Field name in json that identifies it.
         """
         if id_field not in json:
-            raise SwaggerError("Missing id_field: %s" % id_field, self)
-        self.push_str(obj_type, json, str(json[id_field]))
+            raise BaseException ("Missing id_field: %s" % id_field)
+        await self.push_str(obj_type, json, str(json[id_field]))
 
-    def push_str(self, obj_type, json, id_string):
+    async def push_str(self, obj_type, json, id_string):
         """Pushes a new object into the context.
 
         :type obj_type: str
@@ -62,26 +61,18 @@ class ParsingContext(object):
         self.id_stack.append(id_string)
         self.args[obj_type] = json
 
-    def pop(self):
+    async def pop(self):
         """Pops the most recent object out of the context
         """
         del self.args[self.type_stack.pop()]
         self.id_stack.pop()
 
 
-class SwaggerError(Exception):
+async def SwaggerError(error):
     """Raised when an error is encountered mapping the JSON objects into the
     model.
     """
-
-    def __init__(self, msg, context, cause=None):
-        """Ctor.
-
-        :param msg: String message for the error.
-        :param context: ParsingContext object
-        :param cause: Optional exception that caused this one.
-        """
-        super(Exception, self).__init__(msg, context, cause)
+    raise BaseException (error)
 
 
 class SwaggerProcessor(object):
@@ -91,55 +82,58 @@ class SwaggerProcessor(object):
     information to use in the templates.
     """
 
-    def apply(self, resources):
+    async def apply(self, resources):
         """Apply this processor to a loaded Swagger definition.
 
         :param resources: Top level Swagger definition.
         :type  resources: dict
         """
         context = ParsingContext()
+        print(context)
         resources_url = resources.get('url') or 'json:resource_listing'
-        context.push_str('resources', resources, resources_url)
-        self.process_resource_listing(**context.args)
+        print(resources_url)
+        await context.push_str('resources', resources, resources_url)
+        print(context)
+        await self.process_resource_listing(**context.args)
         for listing_api in resources['apis']:
-            context.push('listing_api', listing_api, 'path')
-            self.process_resource_listing_api(**context.args)
-            context.pop()
+            await context.push('listing_api', listing_api, 'path')
+            await self.process_resource_listing_api(**context.args)
+            await context.pop()
 
             api_url = listing_api.get('url') or 'json:api_declaration'
-            context.push_str('resource', listing_api['api_declaration'],
-                             api_url)
-            self.process_api_declaration(**context.args)
-            for api in listing_api['api_declaration']['apis']:
-                context.push('api', api, 'path')
-                self.process_resource_api(**context.args)
-                for operation in api['operations']:
-                    context.push('operation', operation, 'nickname')
-                    self.process_operation(**context.args)
-                    for parameter in operation.get('parameters', []):
-                        context.push('parameter', parameter, 'name')
-                        self.process_parameter(**context.args)
-                        context.pop()
-                    for response in operation.get('errorResponses', []):
-                        context.push('error_response', response, 'code')
-                        self.process_error_response(**context.args)
-                        context.pop()
-                    context.pop()
-                context.pop()
-            models = listing_api['api_declaration'].get('models', {})
-            for (name, model) in models.items():
-                context.push('model', model, 'id')
-                self.process_model(**context.args)
-                for (name, prop) in model['properties'].items():
-                    context.push('prop', prop, 'name')
-                    self.process_property(**context.args)
-                    context.pop()
-                context.pop()
-            context.pop()
-        context.pop()
-        assert context.is_empty(), "Expected %r to be empty" % context
+            await context.push_str('resource', listing_api['api_declaration'], api_url)
+            await self.process_api_declaration(**context.args)
 
-    def process_resource_listing(self, resources, context):
+            for api in listing_api['api_declaration']['apis']:
+                await context.push('api', api, 'path')
+                await self.process_resource_api(**context.args)
+                for operation in api['operations']:
+                    await context.push('operation', operation, 'nickname')
+                    await self.process_operation(**context.args)
+                    for parameter in operation.get('parameters', []):
+                        await context.push('parameter', parameter, 'name')
+                        await self.process_parameter(**context.args)
+                        await context.pop()
+                    for response in operation.get('errorResponses', []):
+                        await context.push('error_response', response, 'code')
+                        await self.process_error_response(**context.args)
+                        await context.pop()
+                    await context.pop()
+                await context.pop()
+            models = listing_api['api_declaration'].get('models', {})
+            for (name, model) in list(models.items()):
+                await context.push('model', model, 'id')
+                await self.process_model(**context.args)
+                for (name, prop) in list(model['properties'].items()):
+                    await context.push('prop', prop, 'name')
+                    await self.process_property(**context.args)
+                    await context.pop()
+                await context.pop()
+            await context.pop()
+        await context.pop()
+        assert await context.is_empty(), "Expected %r to be empty" % context
+
+    async def process_resource_listing(self, resources, context):
         """Post process a resources.json object.
 
         :param resources: ResourceApi object.
@@ -148,7 +142,7 @@ class SwaggerProcessor(object):
         """
         pass
 
-    def process_resource_listing_api(self, resources, listing_api, context):
+    async def process_resource_listing_api(self, resources, listing_api, context):
         """Post process entries in a resource.json's api array.
 
         :param resources: Resource listing object
@@ -158,7 +152,7 @@ class SwaggerProcessor(object):
         """
         pass
 
-    def process_api_declaration(self, resources, resource, context):
+    async def process_api_declaration(self, resources, resource, context):
         """Post process a resource object.
 
         This is parsed from a .json file reference by a resource listing's
@@ -171,7 +165,7 @@ class SwaggerProcessor(object):
         """
         pass
 
-    def process_resource_api(self, resources, resource, api, context):
+    async def process_resource_api(self, resources, resource, api, context):
         """Post process entries in a resource's api array
 
         :param resources: Resource listing object
@@ -182,7 +176,7 @@ class SwaggerProcessor(object):
         """
         pass
 
-    def process_operation(self, resources, resource, api, operation, context):
+    async def process_operation(self, resources, resource, api, operation, context):
         """Post process an operation on an api.
 
         :param resources: Resource listing object
@@ -194,7 +188,7 @@ class SwaggerProcessor(object):
         """
         pass
 
-    def process_parameter(self, resources, resource, api, operation, parameter,
+    async def process_parameter(self, resources, resource, api, operation, parameter,
                           context):
         """Post process a parameter on an operation.
 
@@ -208,7 +202,7 @@ class SwaggerProcessor(object):
         """
         pass
 
-    def process_error_response(self, resources, resource, api, operation,
+    async def process_error_response(self, resources, resource, api, operation,
                                error_response, context):
         """Post process an errorResponse on an operation.
 
@@ -222,7 +216,7 @@ class SwaggerProcessor(object):
         """
         pass
 
-    def process_model(self, resources, resource, model, context):
+    async def process_model(self, resources, resource, model, context):
         """Post process a model from a resources model dictionary.
 
         :param resources: Resource listing object
@@ -233,7 +227,7 @@ class SwaggerProcessor(object):
         """
         pass
 
-    def process_property(self, resources, resource, model, prop, context):
+    async def process_property(self, resources, resource, model, prop, context):
         """Post process a property from a model.
 
         :param resources: Resource listing object
@@ -251,10 +245,10 @@ class WebsocketProcessor(SwaggerProcessor):
     """Process the WebSocket extension for Swagger
     """
 
-    def process_resource_api(self, resources, resource, api, context):
+    async def process_resource_api(self, resources, resource, api, context):
         api.setdefault('has_websocket', False)
 
-    def process_operation(self, resources, resource, api, operation, context):
+    async def process_operation(self, resources, resource, api, operation, context):
         operation['is_websocket'] = operation.get('upgrade') == 'websocket'
 
         if operation['is_websocket']:
@@ -262,7 +256,8 @@ class WebsocketProcessor(SwaggerProcessor):
             if operation['httpMethod'] != 'GET':
                 raise SwaggerError(
                     "upgrade: websocket is only valid on GET operations",
-                    context)
+                    context
+                )
 
 
 # noinspection PyDocstring
@@ -272,9 +267,9 @@ class FlatenningProcessor(SwaggerProcessor):
     Mustache requires a regular schema.
     """
 
-    def process_api_declaration(self, resources, resource, context):
-        resource.model_list = resource.models.values()
+    async def process_api_declaration(self, resources, resource, context):
+        resource.model_list = list(resource.models.values())
 
-    def process_model(self, resources, resource, model, context):
+    async def process_model(self, resources, resource, model, context):
         # Convert properties dict to list
-        model.property_list = model.properties.values()
+        model.property_list = list(model.properties.values())
