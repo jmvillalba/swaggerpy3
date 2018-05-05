@@ -120,8 +120,11 @@ async def json_load_url(http_client, url):
         finally:
             fp.close()
     else:
-        resp = await http_client.request('GET', url)
-        return resp
+        response = await http_client.request('GET', url)
+        payload = await response.json()
+        response.raise_for_status()
+
+        return payload
 
 
 class Loader(object):

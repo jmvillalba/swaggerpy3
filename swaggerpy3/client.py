@@ -47,6 +47,8 @@ class Operation(object):
         method = self.json['httpMethod']
         uri = self.uri
         params = {}
+        data = None
+        headers = None
         for param in self.json.get('parameters', []):
             pname = param['name']
             value = kwargs.get(pname)
@@ -54,15 +56,25 @@ class Operation(object):
             if isinstance(value, list):
                 value = ",".join(value)
 
-            if value:
+            if value is not None:
                 if param['paramType'] == 'path':
-                    uri = uri.replace('{%s}' % pname, str(value))
+                    uri = uri.replace('{%s}' % pname,
+                        urllib.parse.quote_plus(str(value)))
                 elif param['paramType'] == 'query':
                     params[pname] = value
+                elif param['paramType'] == 'body':
+                    if isinstance(value, dict):
+                        if data:
+                            data.update(value)
+                        else:
+                            data = value
+                    else:
+                        raise TypeError(
+                            "Parameters of type 'body' require dict input")
                 else:
                     raise AssertionError(
                         "Unsupported paramType %s" %
-                        param.paramType)
+                        param['paramType'])
                 del kwargs[pname]
             else:
                 if param['required']:
@@ -74,13 +86,27 @@ class Operation(object):
                 (self.json['nickname'], list(kwargs.keys())))
 
         log.info("%s %s(%r)", method, uri, params)
+
+        if data:
+            data = json.dumps(data)
+            headers = {'Content-type': 'application/json',
+                       'Accept': 'application/json'}
+
         if self.json['is_websocket']:
             # Fix up http: URLs
             uri = re.sub('^http', "ws", uri)
-            print(params)
+            if data:
+                raise NotImplementedError(
+                    "Sending body data with websockets not implmented")
             return await self.http_client.ws_connect(uri, params=params)
         else:
-            return await self.http_client.request(method, uri)
+            return await self.http_client.request(
+                method, 
+                uri, 
+                params=params, 
+                data=data, 
+                headers=headers
+            )
 
 class Resource(object):
     """Swagger resource, described in an API declaration.

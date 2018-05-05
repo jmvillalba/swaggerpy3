@@ -9,17 +9,26 @@ class AsyncHttpClient():
 
     def set_basic_auth(self, host, username, password):
         self.auth = aiohttp.BasicAuth(login=username, password=password)
-        self.__session = aiohttp.ClientSession(auth=self.auth)
+        self.session = aiohttp.ClientSession(auth=self.auth)
 
-    async def request(self, method, url):
-        async with self.__session.request(method, url) as request:
-            print(dir(request))
-            print(request.headers)
-            print(await request.text())
+    async def close(self):
+        self.session.close()
 
-            payload = await request.json()
-            request.raise_for_status()
-            return payload
+    async def request(self, method, url, params=None, data=None, headers=None):
+        async with self.session.request(
+                method, 
+                url, 
+                params=params, 
+                data=data, 
+                headers=headers
+        ) as response:
+            print(dir(response))
+            print(response.headers)
+            print(await response.text())
+
+            #payload = await response.json()
+            #response.raise_for_status()
+            return response
 
     async def ws_connect(self, url, params=None):
         """Websocket-client based implementation.
@@ -32,7 +41,7 @@ class AsyncHttpClient():
                 for (k, v) in list(params.items())])
             url += "?%s" % joined_params
 
-        async with self.__session.ws_connect(url) as ws:
+        async with self.session.ws_connect(url) as ws:
             async for msg in ws:
                 payload = msg.json()
 
