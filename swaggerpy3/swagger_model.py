@@ -208,7 +208,6 @@ def validate_required_fields(json, required_fields, context):
     :param required_fields: List of required fields.
     :param context: Current context in the API.
     """
-    print(required_fields)
     missing_fields = [f for f in required_fields if not f in json]
 
     if missing_fields:
