@@ -194,10 +194,6 @@ class SwaggerClient(object):
             self.api_docs = url_or_resource
             loader.process_resource_listing(self.api_docs)
 
-        for resource in self.api_docs['apis']:
-            print(resource)
-            print('here')
-
         self.resources = {
             resource['name']: Resource(resource, http_client)
                    for resource in self.api_docs['apis']

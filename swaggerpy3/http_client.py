@@ -22,10 +22,9 @@ class AsyncHttpClient():
                 data=data, 
                 headers=headers
         ) as response:
-            print(dir(response))
-            print(response.headers)
-            print(await response.text())
-
+            #print(dir(response))
+            #print(response.headers)
+            #await response.text())
             #payload = await response.json()
             #response.raise_for_status()
             return response
@@ -41,10 +40,9 @@ class AsyncHttpClient():
                 for (k, v) in list(params.items())])
             url += "?%s" % joined_params
 
-        async with self.session.ws_connect(url) as ws:
-            async for msg in ws:
-                payload = msg.json()
+#        async with self.session.ws_connect(url) as ws:
 
-                self.websockets.add(ws)
-                return payload
+                #self.websockets.add(ws)
+
+        return await self.session.ws_connect(url)
 

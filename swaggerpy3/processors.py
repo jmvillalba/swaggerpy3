@@ -89,11 +89,8 @@ class SwaggerProcessor(object):
         :type  resources: dict
         """
         context = ParsingContext()
-        print(context)
         resources_url = resources.get('url') or 'json:resource_listing'
-        print(resources_url)
         await context.push_str('resources', resources, resources_url)
-        print(context)
         await self.process_resource_listing(**context.args)
         for listing_api in resources['apis']:
             await context.push('listing_api', listing_api, 'path')
