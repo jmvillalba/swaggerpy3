@@ -46,27 +46,42 @@ Interface <https://wiki.asterisk.org/wiki/display/AST/Asterisk+12+ARI>`__
     #!/usr/bin/env python3
 
     import json
+    import asyncio
 
     from swaggerpy3.client import SwaggerClient
-    from swaggerpy3.http_client import SynchronousHttpClient
+    from swaggerpy3.http_client import AsyncHttpClient
 
-    http_client = SynchronousHttpClient()
-    http_client.set_basic_auth('localhost', 'hey', 'peekaboo')
+    async def main():
 
-    ari = SwaggerClient(
-        "http://localhost:8088/ari/api-docs/resources.json",
-        http_client=http_client)
+        http_client = AsyncHttpClient()
+        http_client.set_basic_auth('localhost', 'hey', 'peekaboo')
 
-    ws = ari.events.eventWebsocket(app='hello')
+        ari = SwaggerClient()
 
-    for msg_str in iter(lambda: ws.recv(), None):
-        msg_json = json.loads(msg_str)
-        if msg_json['type'] == 'StasisStart':
-            channelId = msg_json['channel']['id']
-            ari.channels.answer(channelId=channelId)
-            ari.channels.play(channelId=channelId,
-                              media='sound:hello-world')
-            ari.channels.continueInDialplan(channelId=channelId)
+        await ari.connect(
+            "http://localhost:8088/ari/api-docs/resources.json",
+            http_client=http_client
+        )
+
+        ws = await ari.events.eventWebsocket(app='hello')
+
+        while True:
+            msg = await ws.receive()
+            msg_json = json.loads(msg.data)
+            if msg_json['type'] == 'StasisStart':
+               channelId = msg_json['channel']['id']
+                await ari.channels.answer(channelId=channelId)
+                await ari.channels.play(
+                    channelId=channelId,
+                    media='sound:hello-world'
+                )
+
+                await ari.channels.continueInDialplan(channelId=channelId)
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
+    loop.run_forever()
+
 
 swagger-codegen
 ===============
