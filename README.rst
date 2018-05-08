@@ -1,7 +1,7 @@
 About
 -----
 
-swaggerpy3 is a Python 3 library for using
+swaggerpy3 is an asyncronous Python >= 3.5 library for using
 `Swagger <https://developers.helloreverb.com/swagger/>`__ defined API's.
 
 Swagger itself is best described on the Swagger home page:
