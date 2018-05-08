@@ -32,7 +32,7 @@ setup(
         "Programming Language :: Python",
     ],
     tests_require=["nose", "tissue", "coverage", "httpretty"],
-    install_requires=["requests", "websocket-client"],
+    install_requires=["aiohttp"],
     entry_points="""
     [console_scripts]
     swagger-codegen = swaggerpy3.codegen:main
