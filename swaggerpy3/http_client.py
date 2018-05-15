@@ -1,6 +1,5 @@
 import aiohttp
 import asyncio
-import websockets
 
 class AsyncHttpClient():
     def __init__(self):
